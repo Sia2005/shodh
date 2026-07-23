@@ -8,12 +8,15 @@ just plain functions with clear input/output contracts.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 import httpx
 import trafilatura
 from tavily import TavilyClient
+
+from agent import config
+
+config.validate()
 
 _tavily_client: TavilyClient | None = None
 
@@ -21,10 +24,7 @@ _tavily_client: TavilyClient | None = None
 def _get_tavily() -> TavilyClient:
     global _tavily_client
     if _tavily_client is None:
-        api_key = os.environ.get("TAVILY_API_KEY")
-        if not api_key:
-            raise RuntimeError("TAVILY_API_KEY not set in environment")
-        _tavily_client = TavilyClient(api_key=api_key)
+        _tavily_client = TavilyClient(api_key=config.TAVILY_API_KEY)
     return _tavily_client
 
 

@@ -6,9 +6,12 @@ citations, and contradiction detection between disagreeing sources.
 from __future__ import annotations
 
 import json
-import os
 
 import google.generativeai as genai
+
+from agent import config
+
+config.validate()
 
 _SYNTH_SYSTEM_PROMPT = """You are a research synthesizer. You will receive a research \
 question and a numbered list of evidence excerpts, each tagged with a source URL.
@@ -33,12 +36,9 @@ _model: genai.GenerativeModel | None = None
 def _get_model() -> genai.GenerativeModel:
     global _model
     if _model is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY not set in environment")
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=config.GEMINI_API_KEY)
         _model = genai.GenerativeModel(
-            "gemini-2.0-flash",
+            config.GEMINI_MODEL,
             system_instruction=_SYNTH_SYSTEM_PROMPT,
         )
     return _model
