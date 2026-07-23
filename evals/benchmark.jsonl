@@ -1,0 +1,3 @@
+{"id": "q001", "question": "What was India's UPI transaction volume in 2023, in billions of transactions?", "answer_contains": ["117", "118"], "category": "figure"}
+{"id": "q002", "question": "Who is the current Governor of the Reserve Bank of India?", "answer_contains": ["Malhotra"], "category": "entity"}
+{"id": "q003", "question": "In what year was the Chandrayaan-3 mission launched?", "answer_contains": ["2023"], "category": "date"}
