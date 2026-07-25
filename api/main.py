@@ -65,6 +65,10 @@ def run_agent(question: str):
             state.advance(Phase.SYNTHESIZING, "building draft report")
             raw_chunks = store.query(question, n_results=15)
             evidence = rerank_by_distance(dedupe(raw_chunks))
+            # Charge here, not at fetch time: this is the text that actually
+            # enters a Gemini prompt (~4 chars/token, same heuristic executor.py
+            # used to apply too early, before retrieval had even happened).
+            state.spend(sum(len(e.get("text", "")) for e in evidence) // 4)
             result = synthesizer.synthesize(question, state.sub_questions, evidence)
             state.report = result["report"]
             state.claims = result["claims"]
@@ -81,6 +85,7 @@ def run_agent(question: str):
 
             # CRITIQUING
             state.advance(Phase.CRITIQUING, "grading draft")
+            state.spend(sum(len(e.get("text", "")) for e in evidence) // 4)
             verdict = critic.critique(state.claims, evidence)
             state.claim_verdicts = verdict["claim_verdicts"]
             yield emit("critique complete")

@@ -52,8 +52,9 @@ def run_sub_question(
                 "n_chunks": len(chunks),
             }
         )
-        # Rough token estimate: ~4 chars/token. Real accounting should use
-        # the model's tokenizer once you wire up claim extraction here.
-        state.spend(len(text) // 4)
+        # No token spend here: storing chunks in Chroma doesn't touch the
+        # LLM context window. Budget is charged where evidence actually
+        # enters a Gemini prompt — see api/main.py / evals/run_evals.py,
+        # right before synthesize()/critique() are called.
 
     state.trace.append(f"[DONE] '{sub_question}' -> {len(state.evidence)} sources total so far")

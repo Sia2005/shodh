@@ -70,6 +70,9 @@ def run_full_agent(question: str) -> tuple[str, int]:
 
             state.advance(Phase.SYNTHESIZING)
             evidence = rerank_by_distance(dedupe(store.query(question, n_results=15)))
+            # Charge where evidence actually enters a Gemini prompt, not at
+            # fetch time (see agent/executor.py) — kept in sync with api/main.py.
+            state.spend(sum(len(e.get("text", "")) for e in evidence) // 4)
             result = synthesizer.synthesize(question, state.sub_questions, evidence)
             state.report = result["report"]
             state.claims = result["claims"]
@@ -80,6 +83,7 @@ def run_full_agent(question: str) -> tuple[str, int]:
                 return state.report or "", len(state.evidence)
 
             state.advance(Phase.CRITIQUING)
+            state.spend(sum(len(e.get("text", "")) for e in evidence) // 4)
             verdict = critic.critique(state.claims, evidence)
             state.claim_verdicts = verdict["claim_verdicts"]
 
