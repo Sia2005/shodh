@@ -16,19 +16,23 @@ from agent import config
 config.validate()
 
 _CRITIC_SYSTEM_PROMPT = """You are a strict fact-checking critic. You will receive a \
-draft research report and the evidence it was built from. Check every claim:
+numbered list of claims (each with the evidence numbers it cites) and the full text \
+of that numbered evidence. Grade EACH claim independently against ONLY the evidence \
+at its cited numbers:
 
-1. Is it actually supported by the cited evidence, or is it unsupported / overreaching?
-2. Are there important sub-questions the report doesn't adequately answer?
+- "supported": the cited evidence clearly backs the claim as stated.
+- "weakly-supported": the cited evidence is related but doesn't fully back the claim \
+  as stated (overreaching, missing nuance, only partially confirmed).
+- "unsupported": the cited evidence doesn't back the claim, or the citation is wrong.
 
 Respond ONLY with JSON, no markdown fences:
 {
-  "passes": true | false,
-  "weak_claims": ["claim text that is unsupported or overreaching", ...],
-  "gaps": ["follow-up search query to close an evidence gap", ...]
+  "claim_verdicts": [
+    {"id": "c1", "verdict": "supported" | "weakly-supported" | "unsupported", "reason": "one line"}
+  ]
 }
 
-Set "passes" to true only if weak_claims and gaps are both empty.
+Include exactly one verdict per claim you were given, in the same order.
 """
 
 _model: genai.GenerativeModel | None = None
@@ -45,8 +49,22 @@ def _get_model() -> genai.GenerativeModel:
     return _model
 
 
-def critique(report: str, evidence_summary: str) -> dict:
-    prompt = f"DRAFT REPORT:\n{report}\n\nEVIDENCE USED:\n{evidence_summary}"
+def critique(claims: list[dict], evidence: list[dict]) -> dict:
+    """claims: synthesizer output, each {"id", "text", "citations", "sub_question"}.
+    evidence: the SAME numbered list passed to synthesizer.synthesize(), so a
+    claim's "citations" indices mean the same source here as they did there."""
+    if not claims:
+        # Nothing to grade — and nothing to silently pass either.
+        return {"claim_verdicts": []}
+
+    numbered_evidence = "\n\n".join(
+        f"[{i + 1}] (source: {e['url']})\n{e['text']}" for i, e in enumerate(evidence)
+    )
+    claims_block = "\n\n".join(
+        f"{c['id']}: {c['text']}\ncited evidence: {c['citations']}" for c in claims
+    )
+    prompt = f"CLAIMS:\n{claims_block}\n\nEVIDENCE:\n{numbered_evidence}"
+
     model = _get_model()
     response = model.generate_content(prompt)
     raw = response.text.strip()
@@ -60,7 +78,15 @@ def critique(report: str, evidence_summary: str) -> dict:
     except json.JSONDecodeError as e:
         raise ValueError(f"Critic did not return valid JSON: {raw!r}") from e
 
-    result.setdefault("weak_claims", [])
-    result.setdefault("gaps", [])
-    result.setdefault("passes", not result["weak_claims"] and not result["gaps"])
+    result.setdefault("claim_verdicts", [])
     return result
+
+
+def overall_passes(claim_verdicts: list[dict], max_weak: int = config.MAX_WEAK_CLAIMS) -> bool:
+    """No claims to grade is a fail, not a pass — this is the guard against
+    silently approving an empty draft, and it holds regardless of caller."""
+    if not claim_verdicts:
+        return False
+    unsupported = sum(1 for v in claim_verdicts if v["verdict"] == "unsupported")
+    weak = sum(1 for v in claim_verdicts if v["verdict"] == "weakly-supported")
+    return unsupported == 0 and weak <= max_weak

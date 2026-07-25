@@ -25,7 +25,15 @@ class VectorStore:
         metas = res.get("metadatas", [[]])[0]
         dists = res.get("distances", [[]])[0]
         for doc, meta, dist in zip(docs, metas, dists):
-            out.append({"text": doc, "url": meta.get("url"), "title": meta.get("title"), "distance": dist})
+            out.append(
+                {
+                    "text": doc,
+                    "url": meta.get("url"),
+                    "title": meta.get("title"),
+                    "sub_question": meta.get("sub_question"),
+                    "distance": dist,
+                }
+            )
         return out
 
     def reset(self) -> None:

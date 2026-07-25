@@ -51,38 +51,58 @@ def run_agent(question: str):
         state.advance(Phase.SEARCHING, f"planned {len(state.sub_questions)} sub-questions")
         yield emit("planning complete")
 
-        pending = list(state.sub_questions)
+        pending = [{"sub_question": sq, "search_query": sq} for sq in state.sub_questions]
         while True:
             state.tick()
-            for sq in pending:
-                executor.run_sub_question(sq, state, store)
-                yield emit(f"searched: {sq}")
+            for task in pending:
+                executor.run_sub_question(
+                    task["sub_question"], state, store, search_query=task["search_query"]
+                )
+                yield emit(f"searched: {task['search_query']}")
             pending = []
 
             # SYNTHESIZING
             state.advance(Phase.SYNTHESIZING, "building draft report")
             raw_chunks = store.query(question, n_results=15)
             evidence = rerank_by_distance(dedupe(raw_chunks))
-            result = synthesizer.synthesize(question, evidence)
+            result = synthesizer.synthesize(question, state.sub_questions, evidence)
             state.report = result["report"]
-            state.claims = result.get("contradictions", [])
+            state.claims = result["claims"]
+            state.contradictions = result.get("contradictions", [])
             yield emit("draft synthesized")
+
+            # Guard: no claims means nothing was verifiably extracted from the
+            # evidence — this is a hard failure, not a retry-with-gaps case
+            # (there's no claim text to build a gap from).
+            if not state.claims:
+                state.advance(Phase.FAILED, "synthesizer produced zero claims")
+                yield emit("failed: no claims extracted")
+                return
 
             # CRITIQUING
             state.advance(Phase.CRITIQUING, "grading draft")
-            evidence_summary = "\n".join(f"- {e['title']} ({e['url']})" for e in state.evidence)
-            verdict = critic.critique(state.report, evidence_summary)
+            verdict = critic.critique(state.claims, evidence)
+            state.claim_verdicts = verdict["claim_verdicts"]
             yield emit("critique complete")
 
-            if verdict["passes"]:
+            if critic.overall_passes(state.claim_verdicts):
                 state.advance(Phase.DONE, "critic approved")
                 yield emit("done")
                 return
 
-            # Route back to SEARCHING with targeted gap queries
-            state.gaps = verdict["gaps"]
+            # Route back to SEARCHING with targeted gap queries — each failed
+            # claim's own text becomes the next search query.
+            claims_by_id = {c["id"]: c for c in state.claims}
+            failed = [v for v in state.claim_verdicts if v["verdict"] != "supported"]
+            state.gaps = [
+                {
+                    "claim": claims_by_id[v["id"]]["text"],
+                    "sub_question": claims_by_id[v["id"]]["sub_question"],
+                }
+                for v in failed
+            ]
             state.critique_notes.append(json.dumps(verdict))
-            pending = state.gaps or [question]  # fallback: retry the main question
+            pending = [{"sub_question": g["sub_question"], "search_query": g["claim"]} for g in state.gaps]
             state.advance(Phase.SEARCHING, f"re-searching {len(pending)} gaps")
             yield emit("re-search triggered")
 

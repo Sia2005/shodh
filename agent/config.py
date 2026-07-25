@@ -33,6 +33,10 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 MAX_ITERATIONS = 6
 MAX_TOKENS = 40_000
 
+# Overall critique passes if there are zero unsupported claims and at
+# most this many weakly-supported ones.
+MAX_WEAK_CLAIMS = int(os.environ.get("MAX_WEAK_CLAIMS", "2"))
+
 _REQUIRED = {"GEMINI_API_KEY": GEMINI_API_KEY, "TAVILY_API_KEY": TAVILY_API_KEY}
 
 

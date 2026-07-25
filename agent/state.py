@@ -55,8 +55,10 @@ class AgentState:
     sub_questions: list[str] = field(default_factory=list)
     evidence: list[dict[str, Any]] = field(default_factory=list)  # retrieved chunks + source
     claims: list[dict[str, Any]] = field(default_factory=list)    # extracted claims + citations
+    contradictions: list[dict[str, Any]] = field(default_factory=list)
+    claim_verdicts: list[dict[str, Any]] = field(default_factory=list)  # critic's per-claim grading
     critique_notes: list[str] = field(default_factory=list)
-    gaps: list[str] = field(default_factory=list)  # sub-questions flagged for re-search
+    gaps: list[dict[str, Any]] = field(default_factory=list)  # [{"claim": ..., "sub_question": ...}]
     report: str | None = None
 
     trace: list[str] = field(default_factory=list)  # human-readable log for the UI stream
@@ -90,5 +92,7 @@ class AgentState:
             "n_evidence": len(self.evidence),
             "n_claims": len(self.claims),
             "gaps": self.gaps,
+            "report": self.report,
+            "claim_verdicts": self.claim_verdicts,
             "trace": self.trace[-10:],  # last 10 events only
         }

@@ -17,10 +17,18 @@ def run_sub_question(
     state: AgentState,
     store: VectorStore,
     top_k_sources: int = 3,
+    *,
+    search_query: str | None = None,
 ) -> None:
-    """Mutates state.evidence in place. One call per sub-question."""
-    results = tools.search(sub_question, max_results=top_k_sources)
-    state.trace.append(f"[SEARCH] '{sub_question}' -> {len(results)} results")
+    """Mutates state.evidence in place. One call per sub-question.
+
+    search_query defaults to sub_question, but gap-driven re-search passes
+    a different value: the specific failed-claim text to query for, while
+    sub_question stays the original sub-question this evidence belongs to
+    (used for metadata tagging / grouping, not for the search itself)."""
+    search_query = search_query or sub_question
+    results = tools.search(search_query, max_results=top_k_sources)
+    state.trace.append(f"[SEARCH] '{search_query}' -> {len(results)} results")
 
     for result in results:
         text = tools.fetch_and_clean(result.url)

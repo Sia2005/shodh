@@ -39,4 +39,12 @@ if run:
             trace_box.markdown("\n\n".join(trace_lines[-15:]))
 
             if phase == "DONE":
-                report_box.success("Research complete.")
+                report_box.markdown(payload.get("report") or "*(no report text)*")
+                verdicts = payload.get("claim_verdicts") or []
+                if verdicts:
+                    with st.expander(f"Claim verdicts ({len(verdicts)})"):
+                        for v in verdicts:
+                            st.markdown(f"- **{v['id']}** — {v['verdict']}: {v['reason']}")
+
+            if phase == "FAILED":
+                report_box.error(payload.get("note", "Research failed."))

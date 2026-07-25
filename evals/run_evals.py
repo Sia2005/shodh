@@ -45,7 +45,9 @@ def run_baseline(question: str) -> str:
         store.add(ids=ids, documents=chunks, metadatas=[{"url": r.url, "title": r.title}] * len(chunks))
 
     evidence = rerank_by_distance(dedupe(store.query(question, n_results=10)))
-    result = synthesizer.synthesize(question, evidence)
+    # No planning happened for the baseline — the question stands in as its
+    # own single sub-question.
+    result = synthesizer.synthesize(question, [question], evidence)
     return result["report"], len(evidence)
 
 
@@ -56,28 +58,45 @@ def run_full_agent(question: str) -> tuple[str, int]:
     state.sub_questions = planner.plan(question)
     state.advance(Phase.SEARCHING)
 
-    pending = list(state.sub_questions)
+    pending = [{"sub_question": sq, "search_query": sq} for sq in state.sub_questions]
     try:
         while True:
             state.tick()
-            for sq in pending:
-                executor.run_sub_question(sq, state, store)
+            for task in pending:
+                executor.run_sub_question(
+                    task["sub_question"], state, store, search_query=task["search_query"]
+                )
             pending = []
 
             state.advance(Phase.SYNTHESIZING)
             evidence = rerank_by_distance(dedupe(store.query(question, n_results=15)))
-            result = synthesizer.synthesize(question, evidence)
+            result = synthesizer.synthesize(question, state.sub_questions, evidence)
             state.report = result["report"]
+            state.claims = result["claims"]
+            state.contradictions = result.get("contradictions", [])
+
+            if not state.claims:
+                state.advance(Phase.FAILED, "synthesizer produced zero claims")
+                return state.report or "", len(state.evidence)
 
             state.advance(Phase.CRITIQUING)
-            summary = "\n".join(f"- {e['title']} ({e['url']})" for e in state.evidence)
-            verdict = critic.critique(state.report, summary)
+            verdict = critic.critique(state.claims, evidence)
+            state.claim_verdicts = verdict["claim_verdicts"]
 
-            if verdict["passes"]:
+            if critic.overall_passes(state.claim_verdicts):
                 state.advance(Phase.DONE)
                 return state.report, len(evidence)
 
-            pending = verdict["gaps"] or [question]
+            claims_by_id = {c["id"]: c for c in state.claims}
+            failed = [v for v in state.claim_verdicts if v["verdict"] != "supported"]
+            state.gaps = [
+                {
+                    "claim": claims_by_id[v["id"]]["text"],
+                    "sub_question": claims_by_id[v["id"]]["sub_question"],
+                }
+                for v in failed
+            ]
+            pending = [{"sub_question": g["sub_question"], "search_query": g["claim"]} for g in state.gaps]
             state.advance(Phase.SEARCHING)
     except BudgetExceeded:
         return state.report or "", len(state.evidence)
