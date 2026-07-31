@@ -18,12 +18,11 @@ evals/README.md for the full reasoning.
 
 from __future__ import annotations
 
-import json
 import re
 
 import google.generativeai as genai
 
-from agent import config
+from agent import config, json_utils
 
 config.validate()
 
@@ -123,17 +122,13 @@ def citation_support_accuracy(
         blocks.append(f"SENTENCE {i}: {sentence}\nCITED EVIDENCE:\n{evidence_text}")
     prompt = "\n\n".join(blocks)
 
-    model = _get_model()
-    response = model.generate_content(prompt, request_options={"timeout": timeout})
-    raw = response.text.strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Citation judge did not return valid JSON: {raw!r}") from e
+    # Same one-retry JSON handling the agent's own Gemini calls use: a judge
+    # that throws on malformed output would score the report 0.0, which is
+    # indistinguishable from "every citation was unsupported" and would
+    # quietly corrupt the comparison.
+    result = json_utils.generate_json(
+        _get_model(), prompt, what="Citation judge", timeout=timeout
+    )
 
     verdicts = {v["id"]: v["supported"] for v in result.get("verdicts", [])}
 

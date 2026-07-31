@@ -5,11 +5,9 @@ citations, and contradiction detection between disagreeing sources.
 
 from __future__ import annotations
 
-import json
-
 import google.generativeai as genai
 
-from agent import config
+from agent import config, json_utils
 
 config.validate()
 
@@ -69,18 +67,7 @@ def synthesize(question: str, sub_questions: list[str], evidence_chunks: list[di
     sub_questions_list = "\n".join(f"- {sq}" for sq in sub_questions)
     prompt = f"QUESTION: {question}\n\nSUB-QUESTIONS:\n{sub_questions_list}\n\nEVIDENCE:\n{numbered}"
 
-    model = _get_model()
-    response = model.generate_content(prompt)
-    raw = response.text.strip()
-
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Synthesizer did not return valid JSON: {raw!r}") from e
+    result = json_utils.generate_json(_get_model(), prompt, what="Synthesizer")
 
     result.setdefault("contradictions", [])
     # Assign stable ids ourselves rather than trusting the model to keep
