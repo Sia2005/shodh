@@ -9,3 +9,5 @@ evals/results.json
 *.egg-info/
 claude-login-output.txt
 .claude/settings.local.json
+eval_output.log
+nohup.out
