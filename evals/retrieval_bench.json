@@ -1,0 +1,32 @@
+{
+  "chroma": {
+    "label": "chroma",
+    "backend": "unknown",
+    "timestamp": "2026-10-03T14:42:44.438104+00:00",
+    "corpus_chunks": 400,
+    "n_queries": 30,
+    "repeats": 10,
+    "n_results": 15,
+    "samples": 300,
+    "median_ms": 104.3791,
+    "mean_ms": 111.6662,
+    "p90_ms": 135.5568,
+    "min_ms": 90.8552,
+    "max_ms": 309.4984
+  },
+  "khoj": {
+    "label": "khoj",
+    "backend": "khoj",
+    "timestamp": "2026-10-03T14:47:15.591372+00:00",
+    "corpus_chunks": 400,
+    "n_queries": 30,
+    "repeats": 10,
+    "n_results": 15,
+    "samples": 300,
+    "median_ms": 96.297,
+    "mean_ms": 99.765,
+    "p90_ms": 110.6804,
+    "min_ms": 88.007,
+    "max_ms": 183.96
+  }
+}
