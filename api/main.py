@@ -27,6 +27,14 @@ class ResearchRequest(BaseModel):
     question: str
 
 
+def _source_url(evidence: list[dict], number: object) -> str | None:
+    if isinstance(number, bool) or not isinstance(number, int):
+        return None
+    if 1 <= number <= len(evidence):
+        return evidence[number - 1].get("url")
+    return None
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -43,8 +51,22 @@ def run_agent(question: str):
         payload = state.as_dict()
         if note:
             payload["note"] = note
+        payload["sources"] = [
+            {"n": i, "url": e.get("url"), "title": e.get("title")}
+            for i, e in enumerate(evidence, start=1)
+        ]
+        payload["claims"] = state.claims
+        payload["contradictions"] = [
+            {
+                **c,
+                "source_a_url": _source_url(evidence, c.get("source_a")),
+                "source_b_url": _source_url(evidence, c.get("source_b")),
+            }
+            for c in state.contradictions
+        ]
         return f"data: {json.dumps(payload)}\n\n"
 
+    evidence: list[dict] = []
     try:
         # PLANNING
         state.sub_questions = planner.plan(question)
