@@ -6,7 +6,7 @@ sources, and produces citation-grounded reports. Includes a self-critique
 loop and an eval harness comparing it against single-pass RAG.
 
 ## Hard constraints
-- Python 3.12, FastAPI, Gemini, Tavily, Chroma, Streamlit.
+- Python 3.12, FastAPI, Gemini, Tavily, Khoj, Streamlit.
 - NO agent frameworks. Do not add or suggest LangChain, LlamaIndex,
   CrewAI, AutoGen, or Haystack. The agent loop is hand-written.
 - Single model provider (Gemini). No multi-provider abstraction layers.

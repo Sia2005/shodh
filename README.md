@@ -2,23 +2,28 @@
 
 An autonomous research agent that plans multi-step web research, cross-examines sources, and produces citation-grounded reports — built from scratch, with no agent frameworks.
 
+![Shodh research workspace: progress stepper, metric cards and a finished report with numbered, clickable citations](docs/screenshots/report.png)
+
 Given a question, Shodh decomposes it into sub-questions, retrieves and chunks web sources, synthesizes a report where every sentence carries an inline citation, then grades its own draft claim-by-claim and re-searches specifically for the claims that failed. The loop runs until the critique passes or a hard iteration/token budget stops it. A 30-question eval harness quantifies the whole loop against a single-pass RAG baseline with an independent model-graded judge.
 
 ## Key features
 
+- **Live research workspace.** The Streamlit UI streams the agent's state as it works: a progress stepper (Planning · Searching · Synthesizing · Critiquing · Complete) with per-stage durations and re-search rounds, metric cards (sources analysed, searches run, claims, verification, rounds), and the report with numbered `[n]` citations that link straight to the source. A Claims tab shows each claim with the critic's verdict and one-line reason, a Sources tab lists every cited source, and a Contradictions tab shows both sides whenever sources disagree on a fact — contradictions are now surfaced to the user, not just recorded.
+- **Retrieval on Khoj.** Evidence is indexed with [Khoj](https://github.com/Sia2005/khoj), my own C++ vector search engine: an exact `FlatIndex` with L2 distance, in memory and rebuilt per research run, using the same `all-MiniLM-L6-v2` ONNX embedder the project used before.
 - **Hand-written agent loop.** No LangChain, LlamaIndex, or CrewAI. The entire orchestration — plan → search → synthesize → critique → re-search — is one readable generator in `api/main.py`, backed by an explicit state machine.
 - **State machine with hard guards.** `agent/state.py` enforces a legal-transition table between phases and two ceilings: max 6 loop iterations and a 40k-token context budget, charged at prompt time (when evidence actually enters a Gemini call). Crossing either raises `BudgetExceeded` and lands in `Phase.FAILED` — the agent fails loudly instead of running away.
 - **Per-claim self-critique.** The synthesizer must first extract atomic claims with citations, then write the report only from those claims. A separate critic pass grades each claim `supported` / `weakly-supported` / `unsupported` against only the evidence it cites.
 - **Gap-driven re-retrieval.** Each failed claim's own text becomes a targeted search query routed back through the executor — not a generic "search again."
-- **Contradiction surfacing.** When sources disagree on a fact, the synthesizer records both sides under `contradictions` instead of silently picking one.
 - **Independent, honest eval.** The eval judge is deliberately *not* the agent's own critic (the agent optimizes to satisfy its critic, so that would bias the comparison). A separate Gemini judge scores citation support identically for agent and baseline, on a benchmark whose categories were frozen before any question was written — with the 30-question / 5-category shape enforced by `tests/test_benchmark.py`.
+
+![Sources tab: each cited source with its citation numbers, domain and a link to open it](docs/screenshots/sources.png)
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     Q([question]) --> PLAN["PLANNING — planner.py<br/>decompose into 2–5 sub-questions"]
-    PLAN --> SEARCH["SEARCHING — executor.py + tools.py<br/>Tavily search → fetch → clean → chunk → Chroma"]
+    PLAN --> SEARCH["SEARCHING — executor.py + tools.py<br/>Tavily search → fetch → clean → chunk → Khoj"]
     SEARCH --> SYNTH["SYNTHESIZING — synthesizer.py<br/>extract cited claims → write report → flag contradictions"]
     SYNTH --> CRIT["CRITIQUING — critic.py<br/>grade each claim against its cited evidence"]
     CRIT -- "weak / unsupported claims<br/>become targeted search queries" --> SEARCH
@@ -29,16 +34,18 @@ flowchart TD
 | Path | Role |
 |---|---|
 | `agent/planner.py` | Question → 2–5 independently-searchable sub-questions (one Gemini call) |
-| `agent/executor.py` | Per sub-question: search, fetch, chunk, store in Chroma with source metadata |
+| `agent/executor.py` | Per sub-question: search, fetch, chunk, index in Khoj with source metadata |
 | `agent/tools.py` | Search (Tavily), fetch + boilerplate-strip (httpx + trafilatura), chunker |
 | `agent/synthesizer.py` | Two-stage synthesis: claims with citations first, report written only from them |
 | `agent/critic.py` | Per-claim grading; pass/fail gate that drives the re-search loop |
 | `agent/state.py` | Phase state machine, iteration/token guards, trace log |
 | `agent/json_utils.py` | Deterministic JSON cleanup + one bounded retry for Gemini's structured output |
-| `retrieval/store.py`, `retrieval/ranker.py` | Embedded Chroma wrapper; dedupe + distance rerank |
-| `api/main.py` | The full orchestration loop, streamed as SSE state snapshots |
-| `ui/app.py` | Streamlit client rendering the live agent trace |
-| `evals/` | Frozen 30-question benchmark, agent-vs-baseline runner, independent citation judge |
+| `retrieval/store.py`, `retrieval/ranker.py` | Khoj `FlatIndex` (exact L2) + MiniLM ONNX embedder, in memory per run; dedupe + distance rerank |
+| `api/main.py` | The full orchestration loop, streamed as SSE state snapshots (including the numbered sources, claims and contradictions) |
+| `ui/app.py` | Streamlit layout and SSE streaming |
+| `ui/view_model.py` | Pure functions that turn the received SSE payloads into display state: stage statuses, durations, counts, failure detection, citation links |
+| `ui/theme.py` | CSS and HTML render helpers for the workspace |
+| `evals/` | Frozen 30-question benchmark, agent-vs-baseline runner, independent citation judge, retrieval latency benchmark |
 
 ## Results
 
@@ -54,15 +61,29 @@ The gains concentrate where multi-step retrieval should matter: factual precisio
 
 Caveats, honestly: N is 30 (6 per category), so per-category deltas are a handful of questions each; the headline metric is model-graded and therefore non-deterministic; and the benchmark author and agent author are the same person. The mitigations (categories and answers frozen before any run, one external judge applied identically to both sides, benchmark shape enforced in CI) are documented in `evals/README.md`, but this is a self-evaluation, not a third-party one.
 
+### Retrieval backend: Chroma → Khoj
+
+Per-query retrieval latency through the same `VectorStore` interface, before and after swapping the index (400-chunk corpus built from the benchmark text, 30 queries × 10 repeats, k=15; raw numbers in [`evals/retrieval_bench.json`](evals/retrieval_bench.json)):
+
+| Latency per query | Chroma | Khoj |
+|---|---|---|
+| Median | 104.4 ms | 96.3 ms |
+| Mean | 111.7 ms | 99.8 ms |
+| p90 | 135.6 ms | 110.7 ms |
+
+Each measured query includes embedding the query text with MiniLM, and that embedding step dominates the time. So these are end-to-end retrieval latencies as the agent loop experiences them, not index-only search speed. Reproduce with `python -m evals.bench_retrieval --label khoj` (no API keys or network needed).
+
 ## Setup & run
 
-Prerequisites: Python 3.12, a [Gemini API key](https://ai.google.dev/), and a [Tavily API key](https://tavily.com/) (free tiers work).
+Prerequisites: Python 3.12, a [Gemini API key](https://ai.google.dev/), and a [Tavily API key](https://tavily.com/) (free tiers work). Installing Khoj builds its C++ extension from source, so you also need CMake ≥ 3.24 and a C++17 compiler (e.g. `sudo apt install cmake g++` on Ubuntu, Xcode command-line tools on macOS).
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # then fill in the two API keys
 ```
+
+The agent modules check for both keys at import time, so `pytest` needs a `.env` to exist; the placeholder values from `.env.example` are enough for the test suite.
 
 `.env` variables:
 
@@ -77,19 +98,20 @@ cp .env.example .env   # then fill in the two API keys
 ```bash
 python scripts/smoke_test.py          # verify both API keys actually work
 uvicorn api.main:app --reload         # run the API (port 8000)
-streamlit run ui/app.py               # run the demo UI (second terminal)
+streamlit run ui/app.py               # run the UI (second terminal)
 pytest                                # tests
 python -m evals.run_evals --limit 5   # quick eval smoke run
 python -m evals.run_evals             # full 30-question benchmark
+python -m evals.bench_retrieval --label khoj   # retrieval latency benchmark
 ```
 
 ## Tech stack
 
-Python 3.12 · FastAPI (SSE streaming) · Gemini (`google-generativeai`) · Tavily · httpx + trafilatura · Chroma (embedded) · Streamlit · pytest. Single model provider, no auth, no chat history — one question in, one cited report out.
+Python 3.12 · FastAPI (SSE streaming) · Gemini (`google-generativeai`) · Tavily · httpx + trafilatura · Khoj (C++, pybind11) + MiniLM ONNX embeddings · Streamlit · pytest. Single model provider, no auth, no chat history — one question in, one cited report out.
 
 ## Limitations & next steps
 
 - **Planner JSON reliability (mostly fixed).** The first full eval run hit malformed JSON on 6 of 30 planner calls — unquoted array elements, a stray `=` after the opening bracket, a nested `[[...]]` wrapper, once an entire response in Hindi. `agent/json_utils.py` now strips what can be stripped deterministically and re-prompts exactly once; a residual bad generation costs one question's score, not the run. The cleaner fix would be Gemini's native structured-output mode (`response_schema`) instead of prompt-and-repair.
 - **Sequential fetching.** Sources are fetched one at a time; async fan-out across sub-questions would cut wall-clock time substantially.
-- **Simple retrieval.** Character-window chunking and distance-only reranking; `retrieval/ranker.py` is deliberately shaped as the slot where a cross-encoder reranker would go.
+- **Simple reranking.** Character-window chunking and distance-only reranking; `retrieval/ranker.py` is deliberately shaped as the slot where a cross-encoder reranker would go.
 - **Eval depth.** With more time: a larger benchmark, repeated runs to measure variance in the model-graded judge, a second question author, and a proper look at why citation validity regressed on recent-events questions.
