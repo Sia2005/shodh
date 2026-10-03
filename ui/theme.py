@@ -44,10 +44,16 @@ APP_CSS = """
   --shodh-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-html, body, .stApp, .stApp p, .stApp li, .stApp input, .stApp button, .stApp label, .stApp textarea {
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+html, body, .stApp, [data-testid="stSidebar"], [data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p,
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p,
+button, button p, [data-baseweb="input"] input, [data-baseweb="tab"], .stApp li, .stApp label, .stApp textarea {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif !important;
 }
+html, body, .stApp, [data-testid="stSidebar"], [data-testid="stMarkdownContainer"] p { font-size: 14px; }
 .stApp { background: var(--shodh-bg); color: var(--shodh-text); }
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p { font-size: 13px; color: var(--shodh-muted); }
+button p, .stButton > button p { font-size: 14px; font-weight: 500; }
 
 #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; }
 [data-testid="stHeader"] { background: transparent; height: 2.5rem; }
@@ -72,16 +78,18 @@ html, body, .stApp, .stApp p, .stApp li, .stApp input, .stApp button, .stApp lab
   font-weight: 500;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-[data-testid="stBaseButton-primary"] {
-  background: var(--shodh-accent);
-  border: 1px solid var(--shodh-accent);
-  color: #ffffff;
+[data-testid="stBaseButton-primary"]:not(:disabled) {
+  background: var(--shodh-accent) !important;
+  border: 1px solid var(--shodh-accent) !important;
+  color: #ffffff !important;
 }
+[data-testid="stBaseButton-primary"]:not(:disabled) p { color: #ffffff !important; }
 [data-testid="stBaseButton-primary"]:hover:not(:disabled) {
-  background: var(--shodh-accent-hover);
-  border-color: var(--shodh-accent-hover);
-  color: #ffffff;
+  background: var(--shodh-accent-hover) !important;
+  border-color: var(--shodh-accent-hover) !important;
 }
+.st-key-input_card .stButton, .st-key-input_card .stButton > button,
+.st-key-error_card .stButton, .st-key-error_card .stButton > button { width: auto !important; max-width: 100%; }
 [data-testid="stBaseButton-primary"]:disabled {
   background: var(--shodh-surface-raised);
   border-color: var(--shodh-border);
@@ -104,7 +112,7 @@ html, body, .stApp, .stApp p, .stApp li, .stApp input, .stApp button, .stApp lab
   border: 1px solid var(--shodh-border-strong);
 }
 [data-testid="stTextInput"] div[data-baseweb="input"]:focus-within { border-color: var(--shodh-accent); }
-[data-testid="stTextInput"] input { font-size: 15px; padding: 0.7rem 0.9rem; color: var(--shodh-text); }
+[data-testid="stTextInput"] input { font-size: 14px; padding: 0.7rem 0.9rem; color: var(--shodh-text); }
 [data-testid="stTextInput"] label p { font-size: 13px; font-weight: 600; color: var(--shodh-text); }
 
 [data-testid="stExpander"] details {
@@ -121,23 +129,46 @@ html, body, .stApp, .stApp p, .stApp li, .stApp input, .stApp button, .stApp lab
 [data-baseweb="tab-border"] { background-color: var(--shodh-border); }
 
 .st-key-input_card, [class*="st-key-report_body"], .st-key-error_card {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100%;
   background: var(--shodh-surface);
   border: 1px solid var(--shodh-border);
   border-radius: var(--shodh-radius);
   box-shadow: var(--shodh-shadow);
   padding: 1.1rem 1.25rem;
 }
-.st-key-error_card { border-color: rgba(207, 107, 100, 0.35); }
-[class*="st-key-report_body"] p, [class*="st-key-report_body"] li { font-size: 15px; line-height: 1.7; color: var(--shodh-text); }
-.st-key-example_chips .stButton > button {
-  width: 100%;
-  min-height: 3.2rem;
-  font-size: 13px;
-  text-align: left;
-  justify-content: flex-start;
-  color: var(--shodh-muted);
+.st-key-input_card [data-testid="stElementContainer"],
+[class*="st-key-report_body"] [data-testid="stElementContainer"],
+.st-key-error_card [data-testid="stElementContainer"],
+.st-key-input_card [data-testid="stMarkdown"],
+[class*="st-key-report_body"] [data-testid="stMarkdown"],
+.st-key-error_card [data-testid="stMarkdown"],
+.st-key-input_card [data-testid="stTextInput"],
+.st-key-input_card [data-baseweb="input"],
+.st-key-input_card [data-baseweb="base-input"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
 }
-.st-key-example_chips .stButton > button:hover { color: var(--shodh-text); border-color: var(--shodh-accent); }
+.st-key-error_card { border-color: rgba(207, 107, 100, 0.35); }
+[class*="st-key-report_body"] p, [class*="st-key-report_body"] li { font-size: 14px; line-height: 1.75; color: var(--shodh-text); }
+[data-testid="stButtonGroup"] > div { display: flex; flex-wrap: nowrap; gap: 0.5rem; }
+[data-testid="stBaseButton-pills"], [data-testid="stBaseButton-pillsActive"] {
+  min-height: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--shodh-radius);
+  background: var(--shodh-surface);
+  border: 1px solid var(--shodh-border);
+  color: var(--shodh-muted);
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+[data-testid="stBaseButton-pills"] p, [data-testid="stBaseButton-pillsActive"] p { font-size: 13px !important; color: inherit; }
+[data-testid="stBaseButton-pills"]:hover { border-color: var(--shodh-accent); color: var(--shodh-text); background: var(--shodh-surface-raised); }
+@media (max-width: 640px) {
+  [data-testid="stButtonGroup"] > div { flex-wrap: wrap; }
+}
 .st-key-history_list .stButton > button {
   width: 100%;
   justify-content: flex-start;
@@ -193,7 +224,7 @@ html, body, .stApp, .stApp p, .stApp li, .stApp input, .stApp button, .stApp lab
   border-radius: var(--shodh-radius); padding: 0.1rem 0.5rem; margin-left: 0.5rem; letter-spacing: 0; text-transform: none; }
 
 .shodh-metric-label { font-size: 12px; color: var(--shodh-faint); font-weight: 500; }
-.shodh-metric-value { font-size: 22px; font-weight: 600; color: var(--shodh-text); margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+.shodh-metric-value { font-size: 20px; font-weight: 600; color: var(--shodh-text); margin-top: 0.2rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .shodh-question { font-size: 22px; font-weight: 600; color: var(--shodh-text); line-height: 1.35; margin: 0.4rem 0 0.6rem 0; }
 

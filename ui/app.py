@@ -29,13 +29,14 @@ QUESTION_KEY = "question_input"
 RUNS_KEY = "runs"
 SELECTED_RUN_KEY = "selected_run_index"
 RETRY_QUESTION_KEY = "retry_question"
+EXAMPLE_PILLS_KEY = "example_pills"
 
 PLACEHOLDER_QUESTION = "e.g. How has India's UPI transaction volume changed since 2022?"
-EXAMPLE_QUESTIONS: tuple[str, ...] = (
-    "How has India's UPI transaction volume changed since 2022?",
-    "What does recent evidence say about four-day work weeks and productivity?",
-    "How have lithium-ion battery pack prices changed since 2015, and why?",
-)
+EXAMPLE_QUESTIONS: dict[str, str] = {
+    "UPI growth since 2022": "How has India's UPI transaction volume changed since 2022?",
+    "Four-day work week": "What does recent evidence say about four-day work weeks and productivity?",
+    "Battery prices since 2015": "How have lithium-ion battery pack prices changed since 2015, and why?",
+}
 
 
 def init_session_state() -> None:
@@ -50,8 +51,11 @@ def start_new_research() -> None:
     st.session_state.pop(RETRY_QUESTION_KEY, None)
 
 
-def fill_question(question: str) -> None:
-    st.session_state[QUESTION_KEY] = question
+def apply_example_pill() -> None:
+    selected_label = st.session_state.get(EXAMPLE_PILLS_KEY)
+    if selected_label in EXAMPLE_QUESTIONS:
+        st.session_state[QUESTION_KEY] = EXAMPLE_QUESTIONS[selected_label]
+    st.session_state[EXAMPLE_PILLS_KEY] = None
 
 
 def select_run(run_index: int) -> None:
@@ -123,9 +127,14 @@ def render_empty_state() -> None:
         with column:
             st.markdown(theme.capability_card_html(title, body), unsafe_allow_html=True)
     st.markdown(theme.section_label_html("Try an example"), unsafe_allow_html=True)
-    with st.container(key="example_chips"):
-        for index, example in enumerate(EXAMPLE_QUESTIONS):
-            st.button(example, key=f"example_question_{index}", on_click=fill_question, args=(example,), help=example)
+    st.pills(
+        "Example questions",
+        options=list(EXAMPLE_QUESTIONS),
+        selection_mode="single",
+        key=EXAMPLE_PILLS_KEY,
+        on_change=apply_example_pill,
+        label_visibility="collapsed",
+    )
 
 
 def render_stepper(view: RunView) -> None:
@@ -256,9 +265,8 @@ def render_live(live_area: DeltaGenerator, record: RunRecord) -> None:
         render_run(record, live=True, render_token=f"live_{len(record.events)}")
 
 
-def stream_research(question: str) -> RunRecord:
+def stream_research(question: str, live_area: DeltaGenerator) -> RunRecord:
     record = RunRecord(question=question, api_url=API_URL, started_at=time.monotonic())
-    live_area = st.empty()
     render_live(live_area, record)
     timeout = httpx.Timeout(READ_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS)
     try:
@@ -277,7 +285,6 @@ def stream_research(question: str) -> RunRecord:
         logger.warning("Shodh API stream failed: %s", error)
         record.transport_error = f"{type(error).__name__}: {error}"
     record.stream_closed = True
-    live_area.empty()
     return record
 
 
@@ -288,19 +295,21 @@ def main() -> None:
     render_sidebar()
     render_header()
     question, run_clicked = render_input_card()
+    body = st.empty()
 
     question_to_run = question if run_clicked else st.session_state.pop(RETRY_QUESTION_KEY, None)
     if question_to_run:
-        record = stream_research(question_to_run)
+        record = stream_research(question_to_run, body)
         st.session_state[RUNS_KEY].append(record)
         st.session_state[SELECTED_RUN_KEY] = len(st.session_state[RUNS_KEY]) - 1
         st.rerun()
 
     record = selected_record()
-    if record is None:
-        render_empty_state()
-    else:
-        render_run(record, live=False, render_token="final")
+    with body.container():
+        if record is None:
+            render_empty_state()
+        else:
+            render_run(record, live=False, render_token="final")
 
 
 main()
